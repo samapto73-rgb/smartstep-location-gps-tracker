@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SMARTSTEP — Live GPS Tracker</title>
+  <meta name="theme-color" content="#071b36">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <style>
+    :root{--navy:#071b36;--blue:#0c3768;--cyan:#39c6f4;--ink:#10213b;--muted:#60718a;--line:#d9e6f2;--panel:#fff;--bg:#f2f7fc;--green:#13865b;--amber:#b66a00}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+    header{background:linear-gradient(120deg,#06172e,#0c3c70 72%,#087caa);color:#fff;padding:26px max(18px,calc((100% - 1200px)/2))}
+    .brand{display:flex;align-items:center;gap:13px}
+    .mark{width:46px;height:46px;border-radius:14px;background:rgba(57,198,244,.17);border:1px solid rgba(255,255,255,.24);display:grid;place-items:center;font-size:25px}
+    h1{margin:0;font-size:clamp(23px,4vw,34px);letter-spacing:1.8px}
+    .tagline{margin:5px 0 0;color:#cceaff;font-size:14px}
+    main{max-width:1200px;margin:22px auto;padding:0 16px 34px}
+    .notice{padding:14px 16px;background:#fff8e8;border:1px solid #f0d49a;border-radius:14px;color:#684600;line-height:1.5;margin-bottom:16px}
+    .notice strong{display:block;margin-bottom:3px}
+    .grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(270px,.85fr);gap:16px}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 5px 20px rgba(13,43,77,.055)}
+    .cardhead{padding:17px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px}
+    h2{font-size:16px;margin:0}
+    .pill{font-size:12px;font-weight:700;border-radius:99px;padding:6px 10px;background:#edf2f7;color:#60718a;white-space:nowrap}
+    .pill.live{background:#e3f8ef;color:var(--green)}
+    .pill.error{background:#fff0e6;color:#a24b00}
+    #map{height:510px;background:#dce9f5}
+    .mapfoot{display:flex;flex-wrap:wrap;gap:10px;padding:13px 16px;color:var(--muted);font-size:12px}
+    .side{display:grid;gap:16px;align-content:start}
+    .stats{padding:17px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .stat{padding:13px;border:1px solid #e5edf5;border-radius:13px;min-width:0}
+    .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:700}
+    .value{font-size:17px;font-weight:750;margin-top:7px;overflow-wrap:anywhere}
+    .small{font-size:12px;color:var(--muted);line-height:1.5}
+    .actions{padding:0 17px 17px;display:flex;gap:9px;flex-wrap:wrap}
+    a.btn,button.btn{border:0;border-radius:11px;padding:11px 13px;font-weight:700;font-size:13px;text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+    .primary{background:#0b5794;color:#fff}.secondary{background:#edf5fb;color:#17436a}
+    .setup{padding:18px}
+    .setup p{font-size:13px;line-height:1.55;color:var(--muted);margin:8px 0}
+    ol{padding-left:20px;margin:12px 0}
+    li{font-size:13px;line-height:1.55;margin:8px 0}
+    code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#edf3f8;padding:2px 5px;border-radius:5px;font-size:12px}
+    footer{text-align:center;padding:10px 16px 28px;color:var(--muted);font-size:12px}
+    @media(max-width:850px){.grid{grid-template-columns:1fr}#map{height:420px}}
+    @media(max-width:460px){header{padding-top:20px;padding-bottom:20px}.stats{grid-template-columns:1fr 1fr}#map{height:350px}.value{font-size:15px}}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="mark" aria-hidden="true">⌖</div>
+    <div><h1>SMARTSTEP</h1><p class="tagline">Live GPS location · Safer steps, greater independence</p></div>
+  </div>
+</header>
+<main>
+  <div class="notice">
+    <strong>Setup required before live tracking works</strong>
+    This GitHub Pages site is the map interface. Your Arduino + NEO-6M + SIM800L must send latitude and longitude to a configured ThingSpeak channel. Until then, this page will show a waiting state rather than inventing a location.
+  </div>
+  <div class="grid">
+    <section class="card">
+      <div class="cardhead"><h2>Device location</h2><span class="pill" id="status">WAITING FOR DATA</span></div>
+      <div id="map" role="application" aria-label="GPS location map"></div>
+      <div class="mapfoot"><span>● Map: OpenStreetMap</span><span>·</span><span id="refreshNote">Auto-refresh: every 20 seconds</span></div>
+    </section>
+    <aside class="side">
+      <section class="card">
+        <div class="cardhead"><h2>Latest GPS report</h2><span class="pill" id="age">No report yet</span></div>
+        <div class="stats">
+          <div class="stat"><div class="label">Latitude</div><div class="value" id="lat">—</div></div>
+          <div class="stat"><div class="label">Longitude</div><div class="value" id="lon">—</div></div>
+          <div class="stat"><div class="label">GPS update time</div><div class="value" id="updated" style="font-size:14px">—</div></div>
+          <div class="stat"><div class="label">Data source</div><div class="value" id="source" style="font-size:14px">Not configured</div></div>
+        </div>
+        <div class="actions">
+          <a class="btn primary" id="mapsLink" href="#" target="_blank" rel="noopener" aria-disabled="true">Open in Google Maps</a>
+          <button class="btn secondary" id="refreshBtn" type="button">Refresh now</button>
+        </div>
+      </section>
+      <section class="card">
+        <div class="cardhead"><h2>Connect your tracker</h2></div>
+        <div class="setup">
+          <p><strong>One-time setup:</strong></p>
+          <ol>
+            <li>Create a free ThingSpeak channel with <code>field1</code> = latitude and <code>field2</code> = longitude.</li>
+            <li>In the code below, replace <code>YOUR_CHANNEL_ID</code> and <code>YOUR_READ_API_KEY</code> with your channel details. Leave the read key empty if the channel is public.</li>
+            <li>Configure your Arduino to send fresh GPS coordinates to ThingSpeak through SIM800L GPRS.</li>
+            <li>Upload this <code>index.html</code> file to a GitHub repository and enable GitHub Pages.</li>
+          </ol>
+          <p><strong>Privacy:</strong> anyone who can access a public channel may be able to view its location data. Use a private channel and keep credentials out of public code where appropriate.</p>
+          <p class="small">The page checks for new data every 20 seconds. The real update rate depends on GPS signal, cellular coverage, battery power, and the ThingSpeak service.</p>
+        </div>
+      </section>
+    </aside>
+  </div>
+</main>
+<footer>SMARTSTEP prototype · GPS location may be unavailable indoors or when satellite reception is poor.</footer>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+ integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+  // SET THESE TWO VALUES after creating your ThingSpeak channel.
+  const CHANNEL_ID = "YOUR_CHANNEL_ID";
+  const READ_API_KEY = "YOUR_READ_API_KEY"; // Use "" for a public channel.
+
+  const map = L.map("map").setView([23.8103, 90.4125], 5);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+  let marker = null;
+  let trackLine = L.polyline([], {weight: 4, opacity: .8}).addTo(map);
+  let lastEntryId = null;
+  const el = id => document.getElementById(id);
+  const setStatus = (text, cls="") => { el("status").textContent = text; el("status").className = "pill " + cls; };
+
+  function validCoordinate(lat, lon) {
+    return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  }
+  function showEntry(entry) {
+    const lat = Number(entry.field1), lon = Number(entry.field2);
+    if (!validCoordinate(lat, lon)) return false;
+    const point = [lat, lon];
+    el("lat").textContent = lat.toFixed(6);
+    el("lon").textContent = lon.toFixed(6);
+    const date = entry.created_at ? new Date(entry.created_at) : new Date();
+    el("updated").textContent = date.toLocaleString();
+    el("age").textContent = "Reported " + timeAgo(date);
+    el("source").textContent = "ThingSpeak";
+    const link = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lon);
+    el("mapsLink").href = link;
+    el("mapsLink").setAttribute("aria-disabled", "false");
+    if (!marker) marker = L.marker(point).addTo(map).bindPopup("SMARTSTEP latest location");
+    else marker.setLatLng(point);
+    marker.setPopupContent("<strong>SMARTSTEP</strong><br>" + lat.toFixed(6) + ", " + lon.toFixed(6) + "<br>" + date.toLocaleString());
+    if (entry.entry_id !== lastEntryId) {
+      const points = trackLine.getLatLngs();
+      points.push(L.latLng(lat, lon));
+      if (points.length > 250) points.shift();
+      trackLine.setLatLngs(points);
+      lastEntryId = entry.entry_id;
+    }
+    map.setView(point, Math.max(map.getZoom(), 15), {animate: true});
+    setStatus("LOCATION RECEIVED", "live");
+    return true;
+  }
+  function timeAgo(date) {
+    const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+    if (seconds < 60) return seconds + "s ago";
+    if (seconds < 3600) return Math.floor(seconds / 60) + "m ago";
+    if (seconds < 86400) return Math.floor(seconds / 3600) + "h ago";
+    return Math.floor(seconds / 86400) + "d ago";
+  }
+  async function refreshLocation() {
+    if (CHANNEL_ID === "YOUR_CHANNEL_ID") {
+      setStatus("SETUP REQUIRED", "error");
+      el("source").textContent = "Not configured";
+      el("refreshNote").textContent = "Add ThingSpeak channel details to enable updates";
+      return;
+    }
+    try {
+      const key = READ_API_KEY ? "&api_key=" + encodeURIComponent(READ_API_KEY) : "";
+      const url = "https://api.thingspeak.com/channels/" + encodeURIComponent(CHANNEL_ID) + "/feeds/last.json?results=1" + key;
+      const response = await fetch(url, {cache:"no-store"});
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const entry = await response.json();
+      if (!showEntry(entry)) throw new Error("No valid latitude/longitude fields yet");
+    } catch (err) {
+      setStatus("NO FRESH DATA", "error");
+      el("age").textContent = "Waiting for a valid report";
+      el("source").textContent = "ThingSpeak";
+    }
+  }
+  el("refreshBtn").addEventListener("click", refreshLocation);
+  refreshLocation();
+  setInterval(refreshLocation, 20000);
+</script>
+</body>
+</html>
